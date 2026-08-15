@@ -8,19 +8,19 @@ number:
 date:
 consensus: true
 v: 3
-area: AREA
-workgroup: MASQUE Working Group
+area: "Web and Internet Transport"
+workgroup: "Multiplexed Application Substrate over QUIC Encryption"
 keyword:
  - masque
  - connect-udp
  - rendezvous
 venue:
-  group: MASQUE
-  type: Working Group
-  mail: masque@ietf.org
-  arch: https://mailarchive.ietf.org/arch/browse/masque/
-  github: marten-seemann/draft-seemann-masque-connect-udp-rendezvous
-  latest: https://marten-seemann.github.io/draft-seemann-masque-connect-udp-rendezvous/
+  group: "Multiplexed Application Substrate over QUIC Encryption"
+  type: "Working Group"
+  mail: "masque@ietf.org"
+  arch: "https://mailarchive.ietf.org/arch/browse/masque/"
+  github: "marten-seemann/draft-seemann-masque-connect-udp-rendezvous"
+  latest: "https://marten-seemann.github.io/draft-seemann-masque-connect-udp-rendezvous/draft-seemann-masque-connect-udp-rendezvous.html"
 
 author:
  -
