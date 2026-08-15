@@ -2,31 +2,35 @@
 
 
 
-MASQUE Working Group                                          M. Seemann
+Multiplexed Application Substrate over QUIC Encryption        M. Seemann
 Internet-Draft                                            15 August 2026
 Intended status: Standards Track                                        
 Expires: 16 February 2027
 
 
-                         CONNECT-UDP Rendezvous
+                        UDP Rendezvous over HTTP
            draft-seemann-masque-connect-udp-rendezvous-latest
 
 Abstract
 
-   TODO Abstract
+   This document defines an Extended CONNECT protocol for relaying UDP
+   between two clients authenticated by the same proxy.  A Listener
+   registers with the proxy, and a Client uses the resulting Rendezvous
+   ID to connect to it.  No public UDP address is allocated.
 
 About This Document
 
    This note is to be removed before publishing as an RFC.
 
    The latest revision of this draft can be found at https://marten-
-   seemann.github.io/draft-seemann-masque-connect-udp-rendezvous/.
-   Status information for this document may be found at
-   https://datatracker.ietf.org/doc/draft-seemann-masque-connect-udp-
-   rendezvous/.
+   seemann.github.io/draft-seemann-masque-connect-udp-rendezvous/draft-
+   seemann-masque-connect-udp-rendezvous.html.  Status information for
+   this document may be found at https://datatracker.ietf.org/doc/draft-
+   seemann-masque-connect-udp-rendezvous/.
 
-   Discussion of this document takes place on the MASQUE Working Group
-   mailing list (mailto:masque@ietf.org), which is archived at
+   Discussion of this document takes place on the Multiplexed
+   Application Substrate over QUIC Encryption Working Group mailing list
+   (mailto:masque@ietf.org), which is archived at
    https://mailarchive.ietf.org/arch/browse/masque/.  Subscribe at
    https://www.ietf.org/mailman/listinfo/masque/.
 
@@ -69,15 +73,31 @@ Table of Contents
 
    1.  Introduction
    2.  Conventions and Definitions
-   3.  Security Considerations
-   4.  IANA Considerations
-   5.  Normative References
-   Acknowledgments
+   3.  Protocol
+     3.1.  Requests
+     3.2.  The Connect-UDP-Rendezvous HTTP Field
+   4.  Datagram Forwarding
+     4.1.  Closing Associations
+   5.  Security Considerations
+   6.  IANA Considerations
+   7.  Normative References
    Author's Address
 
 1.  Introduction
 
-   TODO Introduction
+   CONNECT-UDP ([RFC9298]) allows an HTTP client to proxy UDP payloads
+   to a fixed remote host and port.
+
+   This document defines a sibling protocol to CONNECT-UDP for
+   deployments where both endpoints can connect to the same proxy.  A
+   Listener opens a long-lived rendezvous request and receives a
+   Rendezvous ID.  A Client opens a separate rendezvous request carrying
+   that ID.  The proxy associates both requests and forwards HTTP
+   Datagrams ([RFC9297]) between them.
+
+   One Listener request can serve multiple Clients.
+
+   Authentication and distribution of Rendezvous IDs are out of scope.
 
 2.  Conventions and Definitions
 
@@ -87,15 +107,196 @@ Table of Contents
    BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in all
    capitals, as shown here.
 
-3.  Security Considerations
+   This document uses the following terms:
 
-   TODO Security
+   Listener:  The endpoint that creates a listener request.  A Listener
+      can communicate with multiple Clients on one request.
 
-4.  IANA Considerations
+   Client:  The endpoint that creates a join request.  A join request
+      connects to exactly one Listener.
 
-   This document has no IANA actions.
+   Rendezvous ID:  An opaque identifier issued by the proxy for a
+      Listener request.
 
-5.  Normative References
+   The Listener and Client are both HTTP clients.
+
+3.  Protocol
+
+3.1.  Requests
+
+   This protocol uses HTTP Extended CONNECT ([RFC8441], [RFC9220]) with
+   the :protocol pseudo-header field set to connect-udp-rendezvous.  It
+   is defined for HTTP/2 and HTTP/3, but not HTTP/1.1.  An endpoint MUST
+   NOT send a rendezvous request until it has received
+   SETTINGS_ENABLE_CONNECT_PROTOCOL with value 1.
+
+   Endpoints are configured with an HTTPS URI identifying the rendezvous
+   proxy.  A rendezvous request uses this URI as its target.
+
+   Requests and successful responses use the Capsule Protocol as
+   described in Section 3.2 of [RFC9297].  The request and successful
+   response MUST contain a Capsule-Protocol field with value ?1.  A
+   successful response has a status code in the 2xx range.  An endpoint
+   MUST abort the request if these requirements are not met.  The proxy
+   MUST NOT interpret the service URI as a UDP target or open a UDP
+   socket.
+
+3.2.  The Connect-UDP-Rendezvous HTTP Field
+
+   Connect-UDP-Rendezvous is an Item Structured Header Field
+   ([RFC9651]).  Its bare item is the Token listen or join.  The id
+   parameter, when present, is a Byte Sequence.
+
+            +==============================+==================+
+            | Message                      | Field Value      |
+            +==============================+==================+
+            | Listener request             | listen           |
+            +------------------------------+------------------+
+            | Successful Listener response | listen; id=:...: |
+            +------------------------------+------------------+
+            | Join request                 | join; id=:...:   |
+            +------------------------------+------------------+
+            | Successful join response     | join             |
+            +------------------------------+------------------+
+
+                Table 1: Connect-UDP-Rendezvous Field Values
+
+   The field MUST NOT appear in trailers.  Unknown parameters are
+   ignored.  A request with a missing field or a field that cannot be
+   parsed or does not match the table is malformed.  The proxy MUST
+   respond with a 400 (Bad Request) status code.
+
+   A Rendezvous ID is opaque to both endpoints.  The proxy MUST NOT
+   issue the same ID for two live Listener requests.
+
+   An endpoint that receives a successful response without the expected
+   field value MUST abort the request and MUST NOT send HTTP Datagrams
+   on it.
+
+   The proxy SHOULD use the same error response for an unknown
+   Rendezvous ID and an unauthorized association.
+
+4.  Datagram Forwarding
+
+   HTTP Datagrams use the format defined in Section 5 of [RFC9298] and
+   the Context ID allocation rules from Section 4 of [RFC9298].  A join
+   request uses Context ID 0.  When forwarding the first datagram on
+   that request, the proxy allocates a new non-zero odd Context ID on
+   the Listener request and replaces Context ID 0 with it.  It uses that
+   Context ID for all datagrams on the join request; the reverse mapping
+   applies to datagrams from the Listener.  The proxy MUST NOT reuse a
+   Context ID on the same Listener request, modify a UDP payload, or
+   forward it to more than one association.
+
+   When the Listener receives a datagram from the proxy with a
+   previously unseen odd Context ID that has not been closed, it
+   registers that Context ID as a new Client association before
+   processing the datagram.  The Listener MUST NOT send an HTTP Datagram
+   using the Context ID before receiving it from the proxy.
+
+   A Listener request MUST NOT carry Context ID 0.  A recipient MUST
+   abort the request stream if it receives one.  Other unregistered
+   Context IDs are handled as specified in Section 5 of [RFC9298].
+
+   The proxy MUST drop a datagram that does not fit on the outgoing
+   connection.  UDP payloads MUST NOT exceed 65527 octets.  An oversized
+   payload on a join request is handled as specified in Section 5 of
+   [RFC9298]; the proxy MUST close the association if it receives an
+   oversized payload from the Listener.
+
+   A Client MAY send HTTP Datagrams before receiving the response to its
+   join request.  The proxy MUST NOT forward a datagram before sending a
+   successful response.  It MAY discard or buffer early datagrams.
+   Buffering MUST be bounded; buffered datagrams MUST be discarded if
+   the request is rejected.  A Client MUST discard an HTTP/3 Datagram
+   received before the response.
+
+4.1.  Closing Associations
+
+   The RENDEZVOUS_CLOSE capsule closes one association.  It contains
+   exactly one Context ID encoded as a QUIC variable-length integer:
+
+   RENDEZVOUS_CLOSE Capsule {
+     Type (i) = TBD1,
+     Length (i),
+     Context ID (i),
+   }
+
+                 Figure 1: RENDEZVOUS_CLOSE Capsule Format
+
+   RENDEZVOUS_CLOSE capsules are only sent on Listener requests and MUST
+   carry a non-zero odd Context ID.  Receipt on another request, or with
+   a zero or even Context ID, is an error processing the Capsule
+   Protocol.  A proxy MUST treat receipt for a Context ID it never
+   allocated as the same error.
+
+   A RENDEZVOUS_CLOSE capsule sent by the proxy can arrive before the
+   first datagram for that Context ID.  The Listener MUST record the
+   Context ID as closed until the Listener request ends and discard
+   later datagrams carrying it.  Once the Listener or proxy sends or
+   receives this capsule, it MUST NOT send HTTP Datagrams using that
+   Context ID.
+
+   Closing or resetting either direction of a rendezvous request causes
+   the proxy to close the other direction.  Closing the Listener request
+   also invalidates the Rendezvous ID and closes every join request.
+   Closing a join request causes the proxy to send RENDEZVOUS_CLOSE if
+   the Listener request remains open and a Context ID was allocated,
+   unless it received that capsule from the Listener.  A
+   RENDEZVOUS_CLOSE from the Listener causes the proxy to close the
+   corresponding join request.
+
+5.  Security Considerations
+
+   Proxy authentication does not provide end-to-end peer authentication,
+   confidentiality, or integrity.  Applications that require these
+   properties use an end-to-end protocol such as QUIC or DTLS.
+
+6.  IANA Considerations
+
+   This document requests registration of the following value in the
+   "HTTP Upgrade Tokens" registry:
+
+     +========================+==============+==========+===========+
+     | Value                  | Description  | Expected | Reference |
+     |                        |              | Version  |           |
+     |                        |              | Tokens   |           |
+     +========================+==============+==========+===========+
+     | connect-udp-rendezvous | Rendezvous   | None     | This      |
+     |                        | Proxying of  |          | document  |
+     |                        | UDP Payloads |          |           |
+     +------------------------+--------------+----------+-----------+
+
+                                 Table 2
+
+   This document requests registration of the following field in the
+   "Hypertext Transfer Protocol (HTTP) Field Name Registry":
+
+     +========================+=============+============+===========+
+     | Field Name             | Status      | Structured | Reference |
+     |                        |             | Type       |           |
+     +========================+=============+============+===========+
+     | Connect-UDP-Rendezvous | provisional | Item       | This      |
+     |                        |             |            | document  |
+     +------------------------+-------------+------------+-----------+
+
+                                  Table 3
+
+   This document requests registration of the following value in the
+   "HTTP Capsule Types" registry:
+
+        +=======+==================+=============+===============+
+        | Value | Capsule Type     | Status      | Reference     |
+        +=======+==================+=============+===============+
+        | TBD1  | RENDEZVOUS_CLOSE | provisional | This document |
+        +-------+------------------+-------------+---------------+
+
+                                 Table 4
+
+   The change controller is the IETF and the contact is the MASQUE
+   Working Group (masque@ietf.org).
+
+7.  Normative References
 
    [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
               Requirement Levels", BCP 14, RFC 2119,
@@ -106,9 +307,25 @@ Table of Contents
               2119 Key Words", BCP 14, RFC 8174, DOI 10.17487/RFC8174,
               May 2017, <https://www.rfc-editor.org/rfc/rfc8174>.
 
-Acknowledgments
+   [RFC8441]  McManus, P., "Bootstrapping WebSockets with HTTP/2",
+              RFC 8441, DOI 10.17487/RFC8441, September 2018,
+              <https://www.rfc-editor.org/rfc/rfc8441>.
 
-   TODO acknowledge.
+   [RFC9220]  Hamilton, R., "Bootstrapping WebSockets with HTTP/3",
+              RFC 9220, DOI 10.17487/RFC9220, June 2022,
+              <https://www.rfc-editor.org/rfc/rfc9220>.
+
+   [RFC9297]  Schinazi, D. and L. Pardue, "HTTP Datagrams and the
+              Capsule Protocol", RFC 9297, DOI 10.17487/RFC9297, August
+              2022, <https://www.rfc-editor.org/rfc/rfc9297>.
+
+   [RFC9298]  Schinazi, D., "Proxying UDP in HTTP", RFC 9298,
+              DOI 10.17487/RFC9298, August 2022,
+              <https://www.rfc-editor.org/rfc/rfc9298>.
+
+   [RFC9651]  Nottingham, M. and P. Kamp, "Structured Field Values for
+              HTTP", RFC 9651, DOI 10.17487/RFC9651, September 2024,
+              <https://www.rfc-editor.org/rfc/rfc9651>.
 
 Author's Address
 
