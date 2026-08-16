@@ -10,7 +10,7 @@ date:
 consensus: true
 v: 3
 area: "Web and Internet Transport"
-workgroup: "Multiplexed Application Substrate over QUIC Encryption"
+wg: MASQUE
 keyword:
  - masque
  - connect-udp
