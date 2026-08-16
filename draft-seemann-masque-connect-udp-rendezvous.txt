@@ -2,10 +2,10 @@
 
 
 
-Multiplexed Application Substrate over QUIC Encryption        M. Seemann
-Internet-Draft                                            15 August 2026
+MASQUE                                                        M. Seemann
+Internet-Draft                                            16 August 2026
 Intended status: Standards Track                                        
-Expires: 16 February 2027
+Expires: 17 February 2027
 
 
                         UDP Rendezvous over HTTP
@@ -53,7 +53,7 @@ Status of This Memo
    time.  It is inappropriate to use Internet-Drafts as reference
    material or to cite them other than as "work in progress."
 
-   This Internet-Draft will expire on 16 February 2027.
+   This Internet-Draft will expire on 17 February 2027.
 
 Copyright Notice
 
